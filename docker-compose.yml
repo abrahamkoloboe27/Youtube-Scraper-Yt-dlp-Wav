@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  scraper:
+    build: .
+    command: python scraper.py
+    volumes:
+      - ./audios:/app/audios
+      - ./logs:/app/logs
+      - ./cookies.txt:/app/cookies.txt
+      - ./playlist.txt:/app/playlist.txt
+    env_file:
+      - .env
+    depends_on:
+      - minio
+      - mongodb
+
+  retry_manager:
+    build: .
+    command: python retry_failed.py
+    volumes:
+      - ./audios:/app/audios
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    depends_on:
+      - minio
+      - mongodb
+
+  minio:
+    image: minio/minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./minio_data:/data
+
+  mongodb:
+    image: mongo:6
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./mongo_data:/data/db
