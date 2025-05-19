@@ -1,3 +1,23 @@
+"""
+Script principal de scraping et de traitement de playlists YouTube.
+
+Ce script lit une liste de playlists YouTube, extrait les vidéos, télécharge l'audio de chaque vidéo,
+et téléverse les fichiers audio sur MinIO et Azure Blob Storage. Il journalise les succès et échecs dans MongoDB.
+Le téléchargement et le traitement sont parallélisés pour accélérer le processus.
+
+Fonctions principales :
+- get_azure_client : Retourne un client Azure Blob Storage.
+- upload_to_azure : Téléverse un fichier sur Azure Blob Storage.
+- extract_playlist_id : Extrait l'ID d'une playlist à partir de son URL.
+- get_videos_from_playlist : Récupère toutes les URLs vidéos d'une playlist YouTube.
+- is_in_minio : Vérifie si un objet est déjà dans MinIO.
+- is_in_mongo : Vérifie si une vidéo est déjà journalisée dans MongoDB.
+- download_and_upload : Télécharge l'audio d'une vidéo et l'upload vers les stockages, journalise le résultat.
+- main : Parcourt les playlists et orchestre le traitement parallèle.
+
+Usage :
+Exécuter ce script pour traiter automatiquement une ou plusieurs playlists YouTube listées dans playlist.txt.
+"""
 import os
 import logging
 from dotenv import load_dotenv
@@ -27,10 +47,29 @@ MAX_COOKIE_FAILURES = 100
 COOKIE_TIMEOUT = 300  # 5 minutes en secondes
 
 def get_azure_client():
-    connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
-    return BlobServiceClient.from_connection_string(connection_string)
+    """
+    Retourne un client Azure Blob Storage à partir de la variable d'environnement AZURE_STORAGE_CONNECTION_STRING.
 
-def upload_to_azure(file_path, container_name):
+    Entrées :
+        Néant (utilise la variable d'environnement AZURE_STORAGE_CONNECTION_STRING)
+    Sorties :
+        BlobServiceClient : client Azure prêt à l'emploi
+    """
+    account_url = os.getenv("AZURE_ACCOUNT_URL")
+    sas_token = os.getenv("AZURE_SAS_TOKEN")
+    return BlobServiceClient(account_url=account_url, credential=sas_token)
+
+
+def upload_to_azure(file_path: str, container_name: str) -> bool:
+    """
+    Téléverse un fichier local sur Azure Blob Storage dans le conteneur spécifié.
+
+    Entrées :
+        file_path (str) : chemin du fichier local à téléverser
+        container_name (str) : nom du conteneur Azure cible
+    Sorties :
+        bool : True si succès, False sinon
+    """
     try:
         blob_service_client = get_azure_client()
         container_client = blob_service_client.get_container_client(container_name)
@@ -42,13 +81,29 @@ def upload_to_azure(file_path, container_name):
         logging.error(f"Erreur lors de l'upload vers Azure: {e}")
         return False
 
-def extract_playlist_id(playlist_url):
+def extract_playlist_id(playlist_url: str) -> str:
+    """
+    Extrait l'identifiant d'une playlist YouTube à partir de son URL.
+
+    Entrées :
+        playlist_url (str) : URL de la playlist YouTube
+    Sorties :
+        str : ID de la playlist (ou None si non trouvé)
+    """
     import urllib.parse as urlparse
     parsed = urlparse.urlparse(playlist_url)
     query = urlparse.parse_qs(parsed.query)
     return query.get('list', [None])[0]
 
-def get_videos_from_playlist(playlist_id):
+def get_videos_from_playlist(playlist_id: str) -> list:
+    """
+    Récupère toutes les URLs des vidéos d'une playlist YouTube via l'API YouTube Data.
+
+    Entrées :
+        playlist_id (str) : identifiant de la playlist YouTube
+    Sorties :
+        list : liste des URLs des vidéos de la playlist
+    """
     api_key = os.getenv("YOUTUBE_API_KEY")
     base_url = "https://www.googleapis.com/youtube/v3/playlistItems"
     video_urls = []
@@ -72,7 +127,16 @@ def get_videos_from_playlist(playlist_id):
             break
     return video_urls
 
-def is_in_minio(bucket, object_name):
+def is_in_minio(bucket: str, object_name: str) -> bool:
+    """
+    Vérifie si un objet existe déjà dans un bucket MinIO.
+
+    Entrées :
+        bucket (str) : nom du bucket
+        object_name (str) : nom de l'objet à vérifier
+    Sorties :
+        bool : True si l'objet existe, False sinon
+    """
     client = get_minio_client()
     try:
         client.stat_object(bucket, object_name)
@@ -80,11 +144,31 @@ def is_in_minio(bucket, object_name):
     except Exception:
         return False
 
-def is_in_mongo(url):
+def is_in_mongo(url: str) -> bool:
+    """
+    Vérifie si une vidéo a déjà été téléchargée (présence dans MongoDB).
+
+    Entrées :
+        url (str) : URL de la vidéo
+    Sorties :
+        bool : True si la vidéo est déjà journalisée, False sinon
+    """
     db = get_db()
     return db.downloads.find_one({"url": url}) is not None
 
-def download_and_upload(url, output_dir, bucket, playlist_url):
+def download_and_upload(url: str, output_dir: str, bucket: str, playlist_url: str) -> bool:
+    """
+    Télécharge l'audio d'une vidéo YouTube, l'upload sur MinIO et Azure, puis journalise le résultat.
+    Supprime le fichier local et de MinIO si l'upload Azure réussit.
+
+    Entrées :
+        url (str) : URL de la vidéo à traiter
+        output_dir (str) : dossier de sortie pour l'audio
+        bucket (str) : nom du bucket MinIO
+        playlist_url (str) : URL de la playlist d'origine
+    Sorties :
+        bool : True si tout s'est bien passé, False sinon
+    """
     try:
         if not os.path.exists('cookies.txt'):
             logging.error("Le fichier cookies.txt est introuvable. Pause de 5 minutes pour intervention manuelle.")
@@ -144,7 +228,15 @@ def download_and_upload(url, output_dir, bucket, playlist_url):
         logging.error(f"Erreur lors du traitement de {url}: {e}")
         return False
 
-def main():
+def main() -> None:
+    """
+    Fonction principale : lit les playlists, extrait les vidéos, et orchestre le téléchargement/traitement en parallèle.
+
+    Entrées :
+        Néant (utilise playlist.txt et les variables d'environnement)
+    Sorties :
+        None
+    """
     output_dir = "audios"
     bucket = os.getenv("MINIO_BUCKET", "audios")
     Path(output_dir).mkdir(exist_ok=True)

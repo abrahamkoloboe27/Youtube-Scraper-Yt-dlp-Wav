@@ -1,3 +1,18 @@
+"""
+Script de gestion des téléchargements échoués.
+
+Ce script relit les téléchargements ayant échoué (depuis MongoDB), tente à nouveau de les télécharger,
+et de les téléverser sur MinIO et Azure. Les succès et nouveaux échecs sont journalisés.
+
+Fonctions principales :
+- get_azure_client : Retourne un client Azure Blob Storage.
+- upload_to_azure : Téléverse un fichier sur Azure Blob Storage.
+- retry_download_and_upload : Tente de retélécharger et d'uploader un fichier échoué, journalise le résultat.
+- main : Parcourt les échecs et orchestre les tentatives de récupération.
+
+Usage :
+Exécuter ce script pour relancer automatiquement les téléchargements ayant échoué.
+"""
 import logging
 import os
 import time
@@ -24,10 +39,27 @@ logging.basicConfig(
 )
 
 def get_azure_client():
+    """
+    Retourne un client Azure Blob Storage à partir de la variable d'environnement AZURE_STORAGE_CONNECTION_STRING.
+
+    Entrées :
+        Néant (utilise la variable d'environnement AZURE_STORAGE_CONNECTION_STRING)
+    Sorties :
+        BlobServiceClient : client Azure prêt à l'emploi
+    """
     connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
     return BlobServiceClient.from_connection_string(connection_string)
 
-def upload_to_azure(file_path, container_name):
+def upload_to_azure(file_path: str, container_name: str) -> bool:
+    """
+    Téléverse un fichier local sur Azure Blob Storage dans le conteneur spécifié.
+
+    Entrées :
+        file_path (str) : chemin du fichier local à téléverser
+        container_name (str) : nom du conteneur Azure cible
+    Sorties :
+        bool : True si succès, False sinon
+    """
     try:
         blob_service_client = get_azure_client()
         container_client = blob_service_client.get_container_client(container_name)
@@ -39,7 +71,19 @@ def upload_to_azure(file_path, container_name):
         logging.error(f"Erreur lors de l'upload vers Azure: {e}")
         return False
 
-def retry_download_and_upload(url, output_dir, bucket, playlist_url=None):
+def retry_download_and_upload(url: str, output_dir: str, bucket: str, playlist_url: str = None) -> bool:
+    """
+    Tente de retélécharger et d'uploader un fichier échoué, puis journalise le résultat.
+    Supprime le fichier local et de MinIO si l'upload Azure réussit.
+
+    Entrées :
+        url (str) : URL de la vidéo à traiter
+        output_dir (str) : dossier de sortie pour l'audio
+        bucket (str) : nom du bucket MinIO
+        playlist_url (str, optionnel) : URL de la playlist d'origine
+    Sorties :
+        bool : True si tout s'est bien passé, False sinon
+    """
     try:
         if not os.path.exists('cookies.txt'):
             logging.error("Le fichier cookies.txt est introuvable. Pause de 5 minutes pour intervention manuelle.")
@@ -99,7 +143,15 @@ def retry_download_and_upload(url, output_dir, bucket, playlist_url=None):
         logging.error(f"Erreur lors du traitement de {url}: {e}")
         return False
 
-def main():
+def main() -> None:
+    """
+    Fonction principale : relit les téléchargements échoués, tente de les récupérer et journalise les résultats.
+
+    Entrées :
+        Néant (utilise MongoDB et les variables d'environnement)
+    Sorties :
+        None
+    """
     output_dir = "audios"
     bucket = os.getenv("MINIO_BUCKET", "audios")
     Path(output_dir).mkdir(exist_ok=True)
