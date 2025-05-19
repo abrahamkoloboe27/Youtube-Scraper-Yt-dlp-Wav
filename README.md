@@ -36,7 +36,7 @@ Le projet s'appuie sur :
 ## Installation & Lancement 🚦
 1. **Cloner le dépôt**
 ```bash
-git clone <url_du_repo>
+git clone https://github.com/abrahamkoloboe27/Youtube-Scraper-Yt-dlp-Wav.git
 cd Youtube-Scraper-Yt-dlp-Wav
 ```
 
