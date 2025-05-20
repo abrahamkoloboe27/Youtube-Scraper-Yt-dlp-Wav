@@ -58,7 +58,10 @@ def get_azure_client():
         sas_token = f'?{sas_token}'
     
     logging.info(f"Tentative de connexion à Azure Blob Storage: {account_url}")
-    return BlobServiceClient(account_url=account_url, credential=sas_token)
+    return BlobServiceClient(
+                account_url=account_url, 
+                credential=sas_token
+                )
 
 def format_size(size_bytes: int) -> str:
     """
