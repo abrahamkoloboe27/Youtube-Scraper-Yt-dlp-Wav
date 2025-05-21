@@ -31,8 +31,8 @@ class MongoLogger:
         """
         # Liste des URI à essayer dans l'ordre
         mongo_uris = [
-            os.getenv("MONGO_URI", "mongodb://mongodb:27017/"),  # URI du service (docker)
-            "mongodb://localhost:27017/"  # URI locale (hors docker)
+            "mongodb://localhost:27017/",  # URI locale (hors docker) - essayée en premier
+            os.getenv("MONGO_URI", "mongodb://mongodb:27017/")  # URI du service (docker)
         ]
         self.db_name = os.getenv("MONGO_DB", "scraper_db")
         self.client = None

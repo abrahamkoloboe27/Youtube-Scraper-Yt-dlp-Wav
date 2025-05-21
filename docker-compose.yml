@@ -12,6 +12,8 @@ services:
     depends_on:
       - minio
       - mongodb
+    networks:
+      - ytdlp
 
   retry_manager:
     build: .
@@ -24,6 +26,8 @@ services:
     depends_on:
       - minio
       - mongodb
+    networks:
+      - ytdlp
 
   minio:
     image: minio/minio
@@ -34,8 +38,11 @@ services:
     ports:
       - "9000:9000"
       - "9002:9001"
+      - "38293:38293"
     volumes:
       - ./minio_data:/data
+    networks:
+      - ytdlp
 
   mongodb:
     image: mongo:6
@@ -43,3 +50,8 @@ services:
       - "27017:27017"
     volumes:
       - ./mongo_data:/data/db
+    networks:
+      - ytdlp
+networks:
+  ytdlp:
+    driver: bridge

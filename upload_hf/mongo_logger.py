@@ -18,7 +18,9 @@ from dotenv import load_dotenv
 # Configuration du logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format="%(asctime)s ││ %(levelname)s ││ %(name)s ││ %(message)s ",
+    datefmt="%Y-%m-%d %H:%M:%S",
+
     handlers=[
         logging.FileHandler('logs/hf_upload.log'),
         logging.StreamHandler()
@@ -41,20 +43,36 @@ class HFMongoLogger:
             collection_name (str) : Nom de la collection MongoDB à utiliser
         """
         load_dotenv()
-        self.mongo_uri = os.getenv("MONGO_URI", "mongodb://mongodb:27017/")
+        # Liste des URI à essayer dans l'ordre
+        mongo_uris = [
+            "mongodb://localhost:27017/",  # URI locale (hors docker) - essayée en premier
+            os.getenv("MONGO_URI", "mongodb://mongodb:27017/")  # URI du service (docker)
+        ]
         self.db_name = os.getenv("MONGO_DB", "scraper_db")
         self.collection_name = collection_name
+        self.client = None
+        self.db = None
+        self.collection = None
         
-        try:
-            self.client = MongoClient(self.mongo_uri)
-            self.db = self.client[self.db_name]
-            self.collection = self.db[self.collection_name]
-            logging.info(f"Connexion à MongoDB établie: {self.mongo_uri}, collection: {self.collection_name}")
-        except Exception as e:
-            logging.error(f"Erreur lors de la connexion à MongoDB: {e}")
-            self.client = None
-            self.db = None
-            self.collection = None
+        # Essayer chaque URI jusqu'à ce qu'une connexion réussisse
+        for uri in mongo_uris:
+            try:
+                self.client = MongoClient(uri, serverSelectionTimeoutMS=5000)
+                # Vérifier que la connexion fonctionne
+                self.client.server_info()
+                self.db = self.client[self.db_name]
+                self.collection = self.db[self.collection_name]
+                logging.info(f"Connexion à MongoDB réussie avec l'URI: {uri}, collection: {self.collection_name}")
+                self.mongo_uri = uri
+                return
+            except Exception as e:
+                logging.warning(f"Échec de connexion à MongoDB avec l'URI {uri}: {e}")
+        
+        # Si aucune connexion n'a réussi
+        logging.error("Aucune connexion MongoDB n'a réussi.")
+        self.client = None
+        self.db = None
+        self.collection = None
     
     def is_connected(self) -> bool:
         """

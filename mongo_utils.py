@@ -11,6 +11,8 @@ Fonctions principales :
 - get_failed_downloads : Retourne la liste des téléchargements échoués.
 """
 import os
+import logging
+from datetime import datetime
 from pymongo import MongoClient
 
 def get_mongo_client():
@@ -48,6 +50,15 @@ def log_download(metadata: dict) -> None:
     Sorties :
         None
     """
+    # Ajouter les timestamps
+    now = datetime.now()
+    metadata["createdAt"] = now
+    metadata["updatedAt"] = now
+    
+    # S'assurer que le titre est présent
+    if "title" not in metadata and "metadata" in metadata and "title" in metadata["metadata"]:
+        metadata["title"] = metadata["metadata"]["title"]
+    
     db = get_db()
     db.downloads.insert_one(metadata)
 
@@ -60,6 +71,11 @@ def log_failed_download(metadata: dict) -> None:
     Sorties :
         None
     """
+    # Ajouter les timestamps
+    now = datetime.now()
+    metadata["createdAt"] = now
+    metadata["updatedAt"] = now
+    
     db = get_db()
     db.failed_downloads.insert_one(metadata)
 

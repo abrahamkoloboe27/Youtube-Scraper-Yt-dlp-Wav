@@ -28,12 +28,19 @@ from .mongo_logger import MongoLogger
 # Configuration du logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format="%(asctime)s ││ %(levelname)s ││ %(name)s ││ %(message)s ",
+    datefmt="%Y-%m-%d %H:%M:%S",
+
     handlers=[
         logging.FileHandler('logs/audio_processing.log'),
         logging.StreamHandler()
     ]
 )
+
+
+import pyannote
+pyannote_logger = logging.getLogger("pyannote.audio")
+pyannote_logger.setLevel(logging.INFO)  
 
 class DataAugmentation:
     """
@@ -105,8 +112,8 @@ class DataAugmentation:
                 p=self.prob_tempo
             ),
             Shift(
-                min_fraction=-0.05,
-                max_fraction=0.05,
+                min_shift=-0.05,
+                max_shift=0.05,
                 p=0.3
             )
         ])

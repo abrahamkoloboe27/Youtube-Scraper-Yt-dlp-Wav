@@ -15,20 +15,29 @@ from typing import Dict, Any, Optional, List, Union, Tuple
 import numpy as np
 import soundfile as sf
 import torch
+import pyannote
 from pyannote.audio import Pipeline
 from pyannote.core import Segment, Timeline, Annotation
 import librosa
 from .mongo_logger import MongoLogger
+from transformers import logging as hf_logging
+hf_logging.set_verbosity_info()  
 
 # Configuration du logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format="%(asctime)s ││ %(levelname)s ││ %(name)s ││ %(message)s ",
+    datefmt="%Y-%m-%d %H:%M:%S",
+
     handlers=[
         logging.FileHandler('logs/audio_processing.log'),
         logging.StreamHandler()
     ]
 )
+
+
+pyannote_logger = logging.getLogger("pyannote.audio")
+pyannote_logger.setLevel(logging.INFO)  
 
 class Diarization:
     """

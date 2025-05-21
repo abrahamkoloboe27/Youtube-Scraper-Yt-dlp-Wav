@@ -58,12 +58,18 @@ from mongo_utils import log_download, log_failed_download, get_db
 Path("logs").mkdir(exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format="%(asctime)s ││ %(levelname)s ││ %(name)s ││ %(message)s ",
+    datefmt="%Y-%m-%d %H:%M:%S",
+
     handlers=[
         logging.FileHandler('logs/pipeline.log'),
         logging.StreamHandler()
     ]
 )
+
+
+from transformers import logging as hf_logging
+hf_logging.set_verbosity_info()       
 
 # Constantes
 MAX_COOKIE_FAILURES = 100
@@ -139,23 +145,42 @@ def parse_args():
     
     return parser.parse_args()
 
-def check_exists(url: str) -> bool:
+def check_exists(url: str) -> Dict[str, Any]:
     """
     Vérifie si une vidéo a déjà été téléchargée (présence dans MongoDB et MinIO).
     
     Entrées :
         url (str) : URL de la vidéo
     Sorties :
-        bool : True si la vidéo est déjà traitée, False sinon
+        Dict[str, Any] : Informations sur l'existence de la vidéo
+        {
+            "exists": bool,  # True si la vidéo existe déjà
+            "file_path": str,  # Chemin du fichier si trouvé
+            "video_id": str,  # ID de la vidéo YouTube
+            "source": str,  # Source de l'information ("mongodb", "minio", ou None)
+            "metadata": dict  # Métadonnées si disponibles
+        }
     """
+    video_id = url.split('=')[-1]
+    result = {
+        "exists": False,
+        "file_path": None,
+        "video_id": video_id,
+        "source": None,
+        "metadata": {}
+    }
+    
     # Vérifier dans MongoDB
     db = get_db()
-    video_id = url.split('=')[-1]
-    result = db.downloads.find_one({"url": url})
+    mongo_result = db.downloads.find_one({"url": url})
     
-    if result:
-        logging.info(f"Vidéo déjà traitée (présente dans MongoDB): {url}")
-        return True
+    if mongo_result:
+        logging.info(f"Vidéo trouvée dans MongoDB: {url}")
+        result["exists"] = True
+        result["source"] = "mongodb"
+        result["file_path"] = mongo_result.get("file_path")
+        result["metadata"] = mongo_result
+        return result
     
     # Vérifier dans MinIO
     minio_client = MinioClient()
@@ -163,10 +188,13 @@ def check_exists(url: str) -> bool:
     object_name = f"{video_id}.wav"
     
     if minio_client.object_exists(bucket, object_name):
-        logging.info(f"Vidéo déjà traitée (présente dans MinIO): {url}")
-        return True
+        logging.info(f"Vidéo trouvée dans MinIO: {url}")
+        result["exists"] = True
+        result["source"] = "minio"
+        result["file_path"] = f"audios/{video_id}.wav"  # Chemin local présumé
+        return result
     
-    return False
+    return result
 
 def download_and_upload(url: str, output_dir: str, playlist_url: str) -> Dict[str, Any]:
     """
@@ -222,11 +250,13 @@ def download_and_upload(url: str, output_dir: str, playlist_url: str) -> Dict[st
         "url": url,
         "file": os.path.basename(file_path),
         "status": "success",
+        "title": metadata.get("title", ""),  # Ajouter le titre de la vidéo
         "duration": metadata.get("duration", 0),
         "filesize": metadata.get("filesize", 0),
         "playlist_url": playlist_url,
         "azure_path": f"{azure_container}/{os.path.basename(file_path)}" if azure_result["success"] else None,
-        "minio_path": f"{minio_result['bucket']}/{minio_result['object_name']}"
+        "minio_path": f"{minio_result['bucket']}/{minio_result['object_name']}",
+        "metadata": metadata  # Inclure toutes les métadonnées originales
     })
     
     logging.info(f"Audio téléchargé et uploadé avec succès: {file_path}")
@@ -263,19 +293,12 @@ def process_audio(file_path: str, processed_dir: str) -> Dict[str, Any]:
         data_augmenter = DataAugmentation()
         quality_checker = QualityChecker()
         
-        # Initialiser le pipeline
+        # Initialiser le pipeline avec le répertoire de sortie
         pipeline = AudioPipeline(
-            audio_loader=audio_loader,
-            loudness_normalizer=loudness_normalizer,
-            silence_remover=silence_remover,
-            diarizer=diarizer,
-            segmenter=segmenter,
-            audio_cleaner=audio_cleaner,
-            metadata_manager=metadata_manager,
-            data_augmenter=data_augmenter,
-            quality_checker=quality_checker,
-            output_dir=processed_dir
+            base_output_dir=processed_dir
         )
+        
+        # Note: Les composants sont initialisés automatiquement dans la classe AudioPipeline
         
         # Traiter le fichier audio
         result = pipeline.process_file(file_path)
@@ -503,39 +526,99 @@ def main():
             # Télécharger et uploader chaque vidéo
             with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
                 futures = []
+                existing_videos = []
+                
                 for url in video_urls:
                     # Vérifier si la vidéo existe déjà
-                    if check_exists(url):
+                    existence_info = check_exists(url)
+                    
+                    if existence_info["exists"]:
+                        logging.info(f"Vidéo déjà téléchargée: {url}, continuant avec le traitement")
+                        # Ajouter aux vidéos existantes pour traitement ultérieur
+                        if existence_info["file_path"]:
+                            existing_videos.append({
+                                "success": True,
+                                "file_path": existence_info["file_path"],
+                                "metadata": existence_info["metadata"],
+                                "video_id": existence_info["video_id"],
+                                "from_cache": True,
+                                "source": existence_info["source"]
+                            })
                         continue
                     
-                    # Soumettre la tâche
+                    # Soumettre la tâche de téléchargement pour les nouvelles vidéos
                     future = executor.submit(download_and_upload, url, output_dir, playlist_url)
                     futures.append(future)
                 
-                # Traiter les résultats
+                # Traiter les résultats des téléchargements
                 for future in as_completed(futures):
                     try:
                         result = future.result()
                         download_results.append(result)
                     except Exception as e:
                         logging.error(f"Erreur lors du téléchargement parallèle: {e}")
+                
+                # Ajouter les vidéos existantes aux résultats
+                download_results.extend(existing_videos)
         
-        # Vérifier si des vidéos ont été téléchargées
+        # Vérifier si des vidéos ont été téléchargées ou trouvées dans la base de données
         successful_downloads = [r for r in download_results if r["success"]]
-        if not successful_downloads:
-            logging.warning("Aucune vidéo téléchargée avec succès")
+        # Récupérer les vidéos existantes (trouvées dans MongoDB)
+        existing_videos_list = []
+        for playlist_url in playlist_urls:
+            video_urls = youtube_client.get_videos_from_playlist_url(playlist_url)
+            for url in video_urls:
+                existence_info = check_exists(url)
+                if existence_info["exists"] and existence_info["file_path"]:
+                    existing_videos_list.append({
+                        "success": True,
+                        "file_path": existence_info["file_path"],
+                        "metadata": existence_info["metadata"],
+                        "video_id": existence_info["video_id"],
+                        "from_cache": True,
+                        "source": existence_info["source"]
+                    })
+        
+        if not successful_downloads and not existing_videos_list:
+            logging.warning("Aucune vidéo téléchargée avec succès et aucune vidéo existante trouvée")
+            # Ne pas quitter le programme, continuer avec le traitement des fichiers existants
+            # si skip_processing et skip_hf_upload sont tous les deux True, alors il n'y a rien à faire
             if args.skip_processing and args.skip_hf_upload:
                 sys.exit(0)
+        elif existing_videos_list:
+            logging.info(f"Trouvé {len(existing_videos_list)} vidéos existantes dans la base de données")
+            # Ajouter les vidéos existantes aux résultats
+            successful_downloads.extend(existing_videos_list)
     else:
         logging.info("Étape de téléchargement ignorée")
         successful_downloads = []
     
     # Étape 2: Traitement audio, upload vers Hugging Face et nettoyage
-    if successful_downloads or args.skip_download:
-        # Si on a sauté le téléchargement, trouver les fichiers existants
-        if args.skip_download:
+    # Vérifier directement les fichiers audio existants dans le répertoire output_dir
+    audio_files = list(Path(output_dir).glob("*.wav"))
+    if audio_files:
+        logging.info(f"Trouvé {len(audio_files)} fichiers audio existants dans le répertoire {output_dir}")
+    
+    # Continuer même si aucune nouvelle vidéo n'a été téléchargée, car nous pourrions avoir des vidéos existantes
+    if successful_downloads or args.skip_download or existing_videos_list or audio_files:
+        # Si on a sauté le téléchargement ou si aucun nouveau téléchargement n'a été effectué,
+        # utiliser les fichiers audio existants dans le répertoire de sortie
+        if args.skip_download or not successful_downloads:
             audio_files = list(Path(output_dir).glob("*.wav"))
-            successful_downloads = [{"success": True, "file_path": str(f)} for f in audio_files]
+            # Ajouter les fichiers audio existants à la liste des téléchargements réussis
+            # pour qu'ils soient traités par la suite
+            if audio_files:
+                logging.info(f"Utilisation de {len(audio_files)} fichiers audio existants pour le traitement")
+                successful_downloads = [{"success": True, "file_path": str(f)} for f in audio_files]
+            
+        # Ajouter les vidéos existantes (trouvées dans MongoDB) aux téléchargements réussis
+        if existing_videos:
+            logging.info(f"Traitement de {len(existing_videos)} vidéos existantes trouvées dans la base de données")
+            # Ajouter les vidéos existantes à successful_downloads s'ils ne sont pas déjà présents
+            existing_paths = [r["file_path"] for r in successful_downloads]
+            for video in existing_videos:
+                if video["file_path"] not in existing_paths:
+                    successful_downloads.append(video)
         
         # Traiter chaque fichier téléchargé
         for result in successful_downloads:

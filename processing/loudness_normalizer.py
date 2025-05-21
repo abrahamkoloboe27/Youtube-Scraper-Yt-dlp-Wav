@@ -21,20 +21,50 @@ from .mongo_logger import MongoLogger
 # Configuration du logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format="%(asctime)s ││ %(levelname)s ││ %(name)s ││ %(message)s ",
+    datefmt="%Y-%m-%d %H:%M:%S",
+
     handlers=[
         logging.FileHandler('logs/audio_processing.log'),
         logging.StreamHandler()
     ]
 )
 
+
+import pyannote
+pyannote_logger = logging.getLogger("pyannote.audio")
+pyannote_logger.setLevel(logging.INFO)  
+
 class LoudnessNormalizer:
     """
     Classe pour la normalisation de loudness des fichiers audio.
     
-    Cette classe permet de normaliser les fichiers audio selon les standards
-    EBU R128 ou RMS, pour assurer une cohérence sonore dans le corpus.
+    Cette classe permet de normaliser les niveaux audio selon différentes méthodes
+    (EBU R128, RMS, etc.) pour assurer une cohérence dans le corpus.
     """
+    
+    def _convert_numpy_to_python(self, obj):
+        """
+        Convertit récursivement les types NumPy en types Python standards.
+        
+        Entrées :
+            obj : Objet à convertir (peut être un dictionnaire, une liste, ou une valeur NumPy)
+            
+        Sorties :
+            Objet avec tous les types NumPy convertis en types Python standards
+        """
+        if isinstance(obj, dict):
+            return {k: self._convert_numpy_to_python(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._convert_numpy_to_python(item) for item in obj]
+        elif isinstance(obj, (np.integer, np.int32, np.int64)):
+            return int(obj)
+        elif isinstance(obj, (np.floating, np.float32, np.float64)):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return self._convert_numpy_to_python(obj.tolist())
+        else:
+            return obj
     
     def __init__(self, 
                 target_loudness: float = -23.0, 
@@ -163,9 +193,9 @@ class LoudnessNormalizer:
         metadata = {
             'method': self.method,
             'target_loudness': self.target_loudness,
-            'before': before_metrics,
-            'after': after_metrics,
-            'gain_applied': gain
+            'before': self._convert_numpy_to_python(before_metrics),
+            'after': self._convert_numpy_to_python(after_metrics),
+            'gain_applied': float(gain) if isinstance(gain, (np.float32, np.float64)) else gain
         }
         
         return normalized_audio, metadata
