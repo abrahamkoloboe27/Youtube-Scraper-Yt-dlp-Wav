@@ -32,3 +32,4 @@ scipy>=1.9.0
 audiomentations>=0.27.0
 pandas>=1.5.0
 numpy>=1.23.0
+jiwer==3.1.0

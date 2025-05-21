@@ -22,7 +22,8 @@ def get_mongo_client():
     Sorties :
         MongoClient : client MongoDB prêt à l'emploi
     """
-    uri = os.getenv("MONGO_URI", "mongodb://mongodb:27017/")
+    uri = "mongodb://localhost:27017/"
+    #uri = os.getenv("MONGO_URI", "mongodb://mongodb:27017/")
     return MongoClient(uri)
 
 def get_db():

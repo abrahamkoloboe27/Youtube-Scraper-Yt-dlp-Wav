@@ -174,3 +174,13 @@ cython_debug/
 .pypirc
 
 *.log
+
+
+
+mongo_data/
+minio_data/
+processed/
+audios/
+temp_hf/
+logs/
+*cookies.txt

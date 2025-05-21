@@ -52,7 +52,15 @@ class Diarization:
             max_speakers (int) : Nombre maximum de locuteurs attendus
             device (str) : Appareil à utiliser pour l'inférence ('cuda' ou 'cpu')
         """
-        self.auth_token = auth_token or os.getenv("HUGGINGFACE_TOKEN")
+        # Vérifier et récupérer le token d'authentification
+        self.auth_token = auth_token or os.getenv("HUGGINGFACE_TOKEN") or os.getenv("HF_TOKEN")
+        
+        if not self.auth_token:
+            logging.error("Aucun token Hugging Face trouvé. Veuillez définir la variable d'environnement HF_TOKEN ou HUGGINGFACE_TOKEN.")
+            logging.error("Visitez https://hf.co/settings/tokens pour créer votre token d'accès.")
+            logging.error("Puis, acceptez les conditions d'utilisation sur https://hf.co/pyannote/speaker-diarization-3.1")
+            raise ValueError("Token Hugging Face manquant. Voir les logs pour plus d'informations.")
+            
         self.min_speakers = min_speakers
         self.max_speakers = max_speakers
         self.device = device
@@ -64,14 +72,23 @@ class Diarization:
         
         # Initialiser le pipeline de diarisation
         try:
+            logging.info(f"Chargement du pipeline de diarisation avec le token HF (longueur: {len(self.auth_token)})")
             self.pipeline = Pipeline.from_pretrained(
                 "pyannote/speaker-diarization-3.1",
                 use_auth_token=self.auth_token
             )
+            
+            if self.pipeline is None:
+                raise ValueError("Le pipeline n'a pas pu être chargé correctement")
+                
             self.pipeline = self.pipeline.to(torch.device(self.device))
-            logging.info(f"Pipeline de diarisation initialisé sur {self.device}")
+            logging.info(f"Pipeline de diarisation initialisé avec succès sur {self.device}")
         except Exception as e:
             logging.error(f"Erreur lors de l'initialisation du pipeline de diarisation: {e}")
+            logging.error("Assurez-vous que:")
+            logging.error("1. Votre token HF est valide (vérifiez sur https://hf.co/settings/tokens)")
+            logging.error("2. Vous avez accepté les conditions d'utilisation sur https://hf.co/pyannote/speaker-diarization-3.1")
+            logging.error("3. Votre token a les permissions nécessaires pour accéder à ce modèle")
             raise
     
     def process_file(self, file_path: Union[str, Path]) -> Optional[Dict[str, Any]]:

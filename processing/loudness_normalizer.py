@@ -11,7 +11,7 @@ Classes principales :
 import os
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List, Union, Tuple
 import numpy as np
 import soundfile as sf
 import pyloudnorm as pyln
