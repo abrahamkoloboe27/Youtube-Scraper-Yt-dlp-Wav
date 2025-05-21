@@ -1,0 +1,5 @@
+# Requirements pour le module azure_uploader
+azure-storage-blob>=12.16.0
+python-dotenv>=1.0.0
+tqdm>=4.65.0
+pymongo>=4.3.3

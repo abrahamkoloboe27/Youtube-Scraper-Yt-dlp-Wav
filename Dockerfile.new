@@ -1,0 +1,63 @@
+FROM python:3.11-slim
+
+# Fixe la timezone à Paris (adapter si besoin)
+ENV TZ=Europe/Paris
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# Fixe la locale à fr_FR.UTF-8
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    wget \
+    gnupg \
+    ffmpeg \
+    locales && \
+    sed -i '/fr_FR.UTF-8/s/^# //g' /etc/locale.gen && \
+    locale-gen && \
+    rm -rf /var/lib/apt/lists/*
+ENV LANG=fr_FR.UTF-8
+ENV LANGUAGE=fr_FR:fr
+ENV LC_ALL=fr_FR.UTF-8
+
+# Installation de Chrome (pour yt-dlp)
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+# Création du répertoire de travail
+WORKDIR /app
+
+# Copie des fichiers de dépendances
+COPY requirements.txt .
+
+# Installation des dépendances Python globales
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Installation des navigateurs Playwright
+RUN playwright install chromium
+RUN playwright install-deps
+
+# Copie des modules
+COPY scraper/ /app/scraper/
+COPY minio_uploader/ /app/minio_uploader/
+COPY azure_uploader/ /app/azure_uploader/
+COPY storage_cleaner/ /app/storage_cleaner/
+COPY processing/ /app/processing/
+COPY upload_hf/ /app/upload_hf/
+
+# Copie des fichiers utilitaires
+COPY mongo_utils.py .
+COPY run_scraper.py .
+COPY run_hf_upload.py .
+
+# Création des répertoires nécessaires
+RUN mkdir -p /app/audios /app/logs
+
+# Rendre les scripts exécutables
+RUN chmod +x /app/run_scraper.py
+RUN chmod +x /app/run_hf_upload.py
+
+# Définir le point d'entrée
+ENTRYPOINT ["python"]
+CMD ["run_scraper.py"]

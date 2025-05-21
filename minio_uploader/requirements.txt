@@ -1,0 +1,5 @@
+# Requirements pour le module minio_uploader
+minio>=7.1.14
+python-dotenv>=1.0.0
+tqdm>=4.65.0
+pymongo>=4.3.3

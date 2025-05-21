@@ -1,0 +1,6 @@
+# Requirements pour le module storage_cleaner
+python-dotenv>=1.0.0
+pymongo>=4.3.3
+# Dépendances des autres modules
+minio>=7.1.14
+azure-storage-blob>=12.16.0
