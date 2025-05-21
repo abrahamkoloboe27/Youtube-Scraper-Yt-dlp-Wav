@@ -234,7 +234,12 @@ class LoudnessNormalizer:
             
             # Mettre à jour le document MongoDB
             metadata['output_path'] = str(output_path)
-            self.logger.update_stage(doc_id, "loudness_normalized", True, metadata)
+            
+            # S'assurer que toutes les métadonnées sont converties en types Python standards
+            serializable_metadata = self._convert_numpy_to_python(metadata)
+            
+            # Enregistrer dans MongoDB
+            self.logger.update_stage(doc_id, "loudness_normalized", True, serializable_metadata)
             
             logging.info(f"Normalisation terminée: {output_path}")
             return str(output_path)
