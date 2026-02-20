@@ -92,7 +92,7 @@ def retry_download_and_upload(url: str, output_dir: str, bucket: str, playlist_u
             time.sleep(COOKIE_TIMEOUT)
             return False
 
-        output_path = Path(output_dir) / f"{url.split('=')[-1]}.mp3"
+        output_path = Path(output_dir) / f"{url.split('=')[-1]}.wav"
         ydl_opts = {
             'format': 'bestaudio/best',
             'postprocessors': [{

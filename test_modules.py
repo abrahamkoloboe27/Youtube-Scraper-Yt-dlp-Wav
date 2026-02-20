@@ -49,7 +49,7 @@ def test_scraper():
     
     # Tester PlaylistScraper
     try:
-        scraper = PlaylistScraper(output_dir="test_output")
+        scraper = PlaylistScraper()
         logging.info("PlaylistScraper initialisé avec succès")
     except Exception as e:
         logging.error(f"Erreur lors de l'initialisation de PlaylistScraper: {e}")

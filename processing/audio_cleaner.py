@@ -72,7 +72,7 @@ class AudioCleaner:
         self.noise_stationary = noise_stationary
         self.noise_reduction_strength = noise_reduction_strength
         self.quality_threshold_snr = quality_threshold_snr
-        self.apply_compression = apply_compression
+        self.do_compression = apply_compression
         self.logger = MongoLogger()
         
         # Créer le dossier de sortie s'il n'existe pas
@@ -323,7 +323,7 @@ class AudioCleaner:
                 processed_audio = self.apply_noise_reduction(processed_audio, sample_rate)
             
             # 4. Appliquer la compression si activée
-            if self.apply_compression:
+            if self.do_compression:
                 processed_audio = self.apply_compression(processed_audio)
             
             # Mesurer la qualité après traitement
@@ -346,7 +346,7 @@ class AudioCleaner:
                     "noise_reduction": self.noise_reduction,
                     "highpass_filter": self.highpass_cutoff is not None,
                     "lowpass_filter": self.lowpass_cutoff is not None,
-                    "compression": self.apply_compression
+                    "compression": self.do_compression
                 },
                 "filter_settings": {
                     "highpass_cutoff": self.highpass_cutoff,

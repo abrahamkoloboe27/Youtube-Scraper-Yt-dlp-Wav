@@ -88,6 +88,7 @@ class YouTubeClient:
                 
             try:
                 response = requests.get(base_url, params=params)
+                response.raise_for_status()
                 data = response.json()
                 
                 if 'error' in data:
