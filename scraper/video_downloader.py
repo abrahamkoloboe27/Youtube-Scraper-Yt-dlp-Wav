@@ -125,6 +125,7 @@ class VideoDownloader:
                 logging.warning(f"Fichier de cookies non trouvé: {cookie_path.absolute()}")
         
         # Tentatives de téléchargement
+        error_msg = "Nombre maximum de tentatives atteint"
         for attempt in range(self.max_retries):
             try:
                 logging.info(f"Téléchargement de la vidéo: {url} (tentative {attempt+1}/{self.max_retries})")
@@ -136,10 +137,10 @@ class VideoDownloader:
                     if not output_path.exists():
                         raise FileNotFoundError(f"Le fichier {output_path} n'a pas été créé")
                     
-                    # Récupérer les métadonnées
+                    # Récupérer les métadonnées (info peut être None si ignoreerrors=True)
                     metadata = {
-                        "title": info.get('title', ''),
-                        "duration": info.get('duration', 0),
+                        "title": info.get('title', '') if info else '',
+                        "duration": info.get('duration', 0) if info else 0,
                         "filesize": output_path.stat().st_size,
                         "url": url,
                         "file": output_path.name,
@@ -173,8 +174,8 @@ class VideoDownloader:
                             # Vérifier que le fichier a bien été créé
                             if output_path.exists():
                                 metadata = {
-                                    "title": info.get('title', ''),
-                                    "duration": info.get('duration', 0),
+                                    "title": info.get('title', '') if info else '',
+                                    "duration": info.get('duration', 0) if info else 0,
                                     "filesize": output_path.stat().st_size,
                                     "url": url,
                                     "file": output_path.name,

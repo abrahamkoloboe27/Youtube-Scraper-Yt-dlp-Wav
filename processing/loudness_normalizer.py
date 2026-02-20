@@ -157,15 +157,15 @@ class LoudnessNormalizer:
             meter = pyln.Meter(sample_rate)
             current_loudness = meter.integrated_loudness(audio)
             
-            # Éviter la division par zéro ou les valeurs extrêmes
+            # Éviter les valeurs extrêmes (audio quasi-silencieux)
             if current_loudness < -100:
+                logging.warning(f"Loudness intégrée trop basse ({current_loudness:.1f} LUFS), normalisation ignorée.")
+                normalized_audio = audio.copy()
                 gain = 1.0
             else:
-                # Calculer le gain nécessaire
-                gain = pyln.normalize.loudness(audio, current_loudness, self.target_loudness)
-            
-            # Appliquer le gain
-            normalized_audio = audio * gain
+                # pyln.normalize.loudness retourne directement l'audio normalisé
+                normalized_audio = pyln.normalize.loudness(audio, current_loudness, self.target_loudness)
+                gain = 10 ** ((self.target_loudness - current_loudness) / 20.0)
             
         elif self.method == 'rms':
             # Normalisation RMS
